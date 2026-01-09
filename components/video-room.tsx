@@ -649,9 +649,10 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
         </div>
       </header>
 
-      <main className="flex-1 p-2 sm:p-4 md:p-6 relative overflow-hidden">
-        <div className={cn("h-full flex gap-2 sm:gap-4", showChat && "pr-0 md:pr-[420px]")}>
-          <div className={cn("flex-1 grid gap-2 sm:gap-4 h-full auto-rows-fr", getGridLayout(totalParticipants))}>
+      <main className="flex-1 flex relative overflow-hidden">
+        {/* Video grid container */}
+        <div className="flex-1 p-2 sm:p-4 md:p-6">
+          <div className={cn("h-full grid gap-2 sm:gap-4 auto-rows-fr", getGridLayout(totalParticipants))}>
             {/* Local video */}
             <Card className="relative overflow-hidden bg-gradient-to-br from-muted to-muted/50 shadow-lg">
               <video
@@ -716,27 +717,19 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
           </div>
         </div>
 
-        {/* Chat Panel */}
         {showChat && (
-          <div className="hidden md:block">
-            <ChatPanel
-              roomId={roomId}
-              userId={userIdRef.current}
-              userName={userName}
-              onClose={() => setShowChat(false)}
-            />
+          <div className="hidden md:block w-[400px] flex-shrink-0">
+            <ChatPanel roomId={roomId} userId={userIdRef.current} userName={userName} />
           </div>
         )}
 
         {/* Mobile Chat Sheet */}
-        <Sheet open={showChat && !window.matchMedia("(min-width: 768px)").matches} onOpenChange={setShowChat}>
+        <Sheet
+          open={showChat && typeof window !== "undefined" && !window.matchMedia("(min-width: 768px)").matches}
+          onOpenChange={setShowChat}
+        >
           <SheetContent side="right" className="w-full sm:w-[400px] p-0">
-            <ChatPanel
-              roomId={roomId}
-              userId={userIdRef.current}
-              userName={userName}
-              onClose={() => setShowChat(false)}
-            />
+            <ChatPanel roomId={roomId} userId={userIdRef.current} userName={userName} />
           </SheetContent>
         </Sheet>
 

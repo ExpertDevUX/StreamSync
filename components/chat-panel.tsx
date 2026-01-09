@@ -242,7 +242,7 @@ export function ChatPanel({ roomId, userName, userId }: ChatPanelProps) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background border-l">
+    <div className="flex flex-col h-full bg-background">
       <div className="p-4 border-b space-y-3">
         <h3 className="font-semibold">Chat</h3>
         <div className="flex items-center gap-2">
