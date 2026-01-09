@@ -18,7 +18,6 @@ import {
   MessageSquare,
   Sun,
   Moon,
-  Laptop,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -551,7 +550,7 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
 
   const getGridLayout = (count: number) => {
     if (count === 1) return "grid-cols-1"
-    if (count === 2) return "grid-cols-1 sm:grid-cols-2"
+    if (count === 2) return "grid-cols-1 min-[480px]:grid-cols-2"
     if (count === 3 || count === 4) return "grid-cols-2"
     if (count <= 6) return "grid-cols-2 lg:grid-cols-3"
     if (count <= 9) return "grid-cols-2 md:grid-cols-3"
@@ -585,76 +584,73 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
   const totalParticipants = peers.size + 1
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b border-border px-3 sm:px-6 py-3 sm:py-4">
+    <div className="min-h-screen bg-background flex flex-col touch-manipulation overscroll-none">
+      <header className="border-b border-border px-2 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 flex-shrink-0">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <h2 className="text-sm sm:text-lg font-semibold truncate">{roomId}</h2>
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+            <h2 className="text-xs sm:text-sm md:text-lg font-semibold truncate">{roomId}</h2>
             <Button
               variant="outline"
               size="sm"
               onClick={copyRoomLink}
-              className="gap-1 sm:gap-2 bg-transparent hidden sm:flex"
+              className="gap-1 sm:gap-2 bg-transparent hidden md:flex h-8"
             >
               <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden md:inline">Copy Link</span>
+              <span className="hidden lg:inline">Copy Link</span>
             </Button>
-            <Button variant="outline" size="icon" onClick={copyRoomLink} className="sm:hidden h-8 w-8 bg-transparent">
-              <Copy className="w-4 h-4" />
+            <Button variant="outline" size="icon" onClick={copyRoomLink} className="md:hidden h-7 w-7 bg-transparent">
+              <Copy className="w-3.5 h-3.5" />
             </Button>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+              <Users className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="text-xs sm:text-sm font-medium">{participantCount}</span>
+            </div>
+
             {mounted && (
-              <div className="hidden md:flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setTheme("light")}
-                  className={cn(
-                    "rounded-full h-8 w-8 sm:h-9 sm:w-9",
-                    theme === "light" && "bg-primary/10 text-primary",
-                  )}
-                  title="Light Mode"
-                >
-                  <Sun className="w-3 h-3 sm:w-4 sm:h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setTheme("dark")}
-                  className={cn("rounded-full h-8 w-8 sm:h-9 sm:w-9", theme === "dark" && "bg-primary/10 text-primary")}
-                  title="Dark Mode"
-                >
-                  <Moon className="w-3 h-3 sm:w-4 sm:h-4" />
-                </Button>
+              <>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setTheme("system")}
                   className={cn(
-                    "rounded-full h-8 w-8 sm:h-9 sm:w-9",
+                    "rounded-full h-7 w-7 sm:h-8 sm:w-8 hidden sm:flex",
                     theme === "system" && "bg-primary/10 text-primary",
                   )}
                   title="System Theme"
                 >
-                  <Laptop className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </Button>
-              </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="rounded-full h-7 w-7 sm:h-8 sm:w-8 hidden sm:flex"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  ) : (
+                    <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  )}
+                </Button>
+              </>
             )}
-            <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-muted">
-              <Users className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="text-xs sm:text-sm font-medium">{totalParticipants}</span>
-            </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 flex relative overflow-hidden">
+      <main className="flex-1 flex relative overflow-hidden min-h-0">
         {/* Video grid container */}
-        <div className="flex-1 p-2 sm:p-4 md:p-6">
-          <div className={cn("h-full grid gap-2 sm:gap-4 auto-rows-fr", getGridLayout(totalParticipants))}>
+        <div className="flex-1 p-1 sm:p-2 md:p-4 lg:p-6 overflow-y-auto overscroll-contain">
+          <div
+            className={cn(
+              "h-full grid gap-1 sm:gap-2 md:gap-4 auto-rows-fr content-start",
+              getGridLayout(totalParticipants),
+            )}
+          >
             {/* Local video */}
-            <Card className="relative overflow-hidden bg-gradient-to-br from-muted to-muted/50 shadow-lg">
+            <Card className="relative overflow-hidden bg-gradient-to-br from-muted to-muted/50 shadow-lg min-h-[180px] sm:min-h-[240px] md:min-h-0">
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -667,12 +663,12 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
               />
               {!isVideoEnabled && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-32 md:h-32 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center text-2xl sm:text-3xl md:text-5xl font-bold text-primary">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-32 lg:h-32 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-primary">
                     {userName.charAt(0).toUpperCase()}
                   </div>
                 </div>
               )}
-              <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md bg-black/50 backdrop-blur-sm text-white text-xs sm:text-sm font-medium">
+              <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-black/60 backdrop-blur-sm text-white text-[10px] sm:text-xs font-medium">
                 You {isScreenSharing && "(Sharing)"}
               </div>
             </Card>
@@ -681,7 +677,7 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
             {Array.from(peers.values()).map((peer) => (
               <Card
                 key={peer.id}
-                className="relative overflow-hidden bg-gradient-to-br from-muted to-muted/50 shadow-lg"
+                className="relative overflow-hidden bg-gradient-to-br from-muted to-muted/50 shadow-lg min-h-[180px] sm:min-h-[240px] md:min-h-0"
               >
                 {peer.stream && peer.stream.getTracks().length > 0 ? (
                   <video
@@ -704,12 +700,12 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-32 md:h-32 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center text-2xl sm:text-3xl md:text-5xl font-bold text-primary">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-32 lg:h-32 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-primary">
                       {peer.name.charAt(0).toUpperCase()}
                     </div>
                   </div>
                 )}
-                <div className="absolute bottom-2 left-2 px-2 py-1 rounded-md bg-black/50 backdrop-blur-sm text-white text-xs sm:text-sm font-medium">
+                <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-black/60 backdrop-blur-sm text-white text-[10px] sm:text-xs font-medium">
                   {peer.name}
                 </div>
               </Card>
@@ -718,24 +714,24 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
         </div>
 
         {showChat && (
-          <div className="hidden md:block w-[400px] flex-shrink-0">
+          <div className="hidden md:block w-[350px] lg:w-[400px] flex-shrink-0 border-l border-border">
             <ChatPanel roomId={roomId} userId={userIdRef.current} userName={userName} />
           </div>
         )}
 
         {/* Mobile Chat Sheet */}
-        <Sheet
-          open={showChat && typeof window !== "undefined" && !window.matchMedia("(min-width: 768px)").matches}
-          onOpenChange={setShowChat}
-        >
-          <SheetContent side="right" className="w-full sm:w-[400px] p-0">
+        <Sheet open={showChat && typeof window !== "undefined" && window.innerWidth < 768} onOpenChange={setShowChat}>
+          <SheetContent side="bottom" className="h-[80vh] max-h-[600px] p-0 rounded-t-2xl">
             <ChatPanel roomId={roomId} userId={userIdRef.current} userName={userName} />
           </SheetContent>
         </Sheet>
 
         {/* Settings Sheet */}
         <Sheet open={showSettings} onOpenChange={setShowSettings}>
-          <SheetContent side="right" className="w-full sm:w-[400px] p-0">
+          <SheetContent
+            side="bottom"
+            className="h-[80vh] max-h-[600px] md:h-auto md:max-h-none md:side-right p-0 rounded-t-2xl md:rounded-none"
+          >
             <SettingsPanel
               onClose={() => setShowSettings(false)}
               onCaptionsChange={handleCaptionsChange}
@@ -754,63 +750,63 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
       </main>
 
       {/* Controls Footer */}
-      <footer className="border-t border-border px-3 sm:px-6 py-3 sm:py-4">
-        <div className="flex items-center justify-center gap-2 sm:gap-3">
+      <footer className="border-t border-border px-2 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 flex-shrink-0 safe-area-bottom">
+        <div className="flex items-center justify-center gap-2 sm:gap-3 md:gap-4">
           <Button
             variant={isAudioEnabled ? "default" : "destructive"}
             size="icon"
             onClick={toggleAudio}
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-lg active:scale-95 transition-transform"
           >
-            {isAudioEnabled ? <Mic className="w-4 h-4 sm:w-5 sm:h-5" /> : <MicOff className="w-4 h-4 sm:w-5 sm:h-5" />}
+            {isAudioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6" />}
           </Button>
           <Button
             variant={isVideoEnabled ? "default" : "destructive"}
             size="icon"
             onClick={toggleVideo}
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-lg active:scale-95 transition-transform"
           >
             {isVideoEnabled ? (
-              <Video className="w-4 h-4 sm:w-5 sm:h-5" />
+              <Video className="w-5 h-5 sm:w-6 sm:h-6" />
             ) : (
-              <VideoOff className="w-4 h-4 sm:w-5 sm:h-5" />
+              <VideoOff className="w-5 h-5 sm:w-6 sm:h-6" />
             )}
           </Button>
           <Button
             variant={isScreenSharing ? "secondary" : "outline"}
             size="icon"
             onClick={toggleScreenShare}
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full hidden sm:flex active:scale-95 transition-transform"
           >
             {isScreenSharing ? (
-              <MonitorOff className="w-4 h-4 sm:w-5 sm:h-5" />
+              <MonitorOff className="w-5 h-5 sm:w-6 sm:h-6" />
             ) : (
-              <Monitor className="w-4 h-4 sm:w-5 sm:h-5" />
+              <Monitor className="w-5 h-5 sm:w-6 sm:h-6" />
             )}
           </Button>
           <Button
             variant="outline"
             size="icon"
             onClick={() => setShowChat(!showChat)}
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full active:scale-95 transition-transform"
           >
-            <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+            <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
           <Button
             variant="outline"
             size="icon"
             onClick={() => setShowSettings(!showSettings)}
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full active:scale-95 transition-transform"
           >
-            <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+            <Settings className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
           <Button
             variant="destructive"
             size="icon"
             onClick={handleEndCall}
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-lg active:scale-95 transition-transform"
           >
-            <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5" />
+            <PhoneOff className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
         </div>
       </footer>

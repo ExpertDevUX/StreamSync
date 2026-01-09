@@ -75,6 +75,7 @@
     @apply bg-background text-foreground;
   }
 
+  /* Enhanced mobile optimizations */
   /* Prevent zoom on mobile input focus */
   @media screen and (max-width: 640px) {
     input,
@@ -84,13 +85,47 @@
     }
   }
 
-  /* Smooth scrolling for mobile */
+  /* Smooth scrolling and momentum for mobile */
   html {
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: none;
   }
 
-  /* Fix video aspect ratio on mobile */
+  /* Fix video aspect ratio and performance on mobile */
   video {
     object-fit: cover;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+  }
+
+  /* Safe area support for notched devices */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Prevent pull-to-refresh on mobile */
+  body {
+    overscroll-behavior-y: contain;
+  }
+
+  /* Better touch interactions */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  /* Prevent text selection on UI controls */
+  button,
+  .prevent-select {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Optimize rendering for mobile */
+  @media (max-width: 768px) {
+    * {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
   }
 }

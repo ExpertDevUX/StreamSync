@@ -1,28 +1,82 @@
-console.log("[StreamSync] Extension active")
+console.log("[ConnectNow] Extension content script loaded")
+
+// Inject helper functions into the page
+const script = document.createElement("script")
+script.textContent = `
+  (function() {
+    window.connectNowExtension = {
+      isInstalled: true,
+      version: "3.0.0",
+      
+      sendMessage: function(action, data) {
+        window.postMessage({
+          type: "CONNECTNOW_EXT_REQUEST",
+          action: action,
+          ...data
+        }, "*");
+      },
+      
+      copyToClipboard: function(text) {
+        this.sendMessage("COPY_LINK", { text: text });
+      },
+      
+      showNotification: function(title, message) {
+        this.sendMessage("NOTIFICATION", { title: title, message: message });
+      }
+    };
+    
+    console.log("[ConnectNow] Extension helper injected - v3.0.0");
+    
+    // Dispatch event to notify page that extension is ready
+    window.dispatchEvent(new CustomEvent("connectnow:extension:ready", {
+      detail: { version: "3.0.0" }
+    }));
+  })();
+`
+document.documentElement.appendChild(script)
+script.remove()
 
 // Listen for messages from the web app
 window.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "STREAMSYNC_EXT_REQUEST") {
-    console.log("[StreamSync] Extension received request:", event.data)
+  if (event.data && event.data.type === "CONNECTNOW_EXT_REQUEST") {
+    console.log("[ConnectNow] Extension received request:", event.data)
 
-    // Handle different request types
     switch (event.data.action) {
       case "COPY_LINK":
-        if (event.data.link) {
-          navigator.clipboard.writeText(event.data.link)
-          sendResponse({ success: true, message: "Link copied" })
+        if (event.data.text) {
+          navigator.clipboard.writeText(event.data.text).then(() => {
+            sendResponse({ success: true, message: "Link copied to clipboard" })
+          })
         }
         break
 
       case "NOTIFICATION":
-        if (event.data.message) {
-          console.log("[StreamSync] Notification:", event.data.message)
-          sendResponse({ success: true })
-        }
+        window.dispatchEvent(
+          new CustomEvent("connectnow:notification", {
+            detail: {
+              type: "NOTIFICATION",
+              title: event.data.title || "ConnectNow",
+              message: event.data.message || "",
+            },
+          }),
+        )
+        sendResponse({ success: true })
+        break
+
+      case "USER_JOINED":
+        window.dispatchEvent(
+          new CustomEvent("connectnow:user:joined", {
+            detail: {
+              type: "USER_JOINED",
+              userName: event.data.userName || "Someone",
+            },
+          }),
+        )
+        sendResponse({ success: true })
         break
 
       default:
-        console.log("[StreamSync] Unknown action:", event.data.action)
+        console.log("[ConnectNow] Unknown action:", event.data.action)
     }
   }
 })
@@ -31,28 +85,31 @@ window.addEventListener("message", (event) => {
 function sendResponse(response) {
   window.postMessage(
     {
-      type: "STREAMSYNC_EXT_RESPONSE",
+      type: "CONNECTNOW_EXT_RESPONSE",
       ...response,
     },
     "*",
   )
 }
 
-// Inject helper functions into the page
-const script = document.createElement("script")
-script.textContent = `
-  window.streamSyncExtension = {
-    isInstalled: true,
-    sendMessage: function(action, data) {
-      window.postMessage({
-        type: "STREAMSYNC_EXT_REQUEST",
-        action: action,
-        ...data
-      }, "*");
-    }
-  };
-  
-  console.log("[StreamSync] Extension helper injected");
-`
-document.documentElement.appendChild(script)
-script.remove()
+// Monitor for new participants joining
+const observer = new MutationObserver((mutations) => {
+  mutations.forEach((mutation) => {
+    mutation.addedNodes.forEach((node) => {
+      if (node.nodeType === 1) {
+        // Look for video elements or participant indicators
+        if (node.tagName === "VIDEO" || node.classList?.contains("participant")) {
+          console.log("[ConnectNow] New participant detected")
+        }
+      }
+    })
+  })
+})
+
+// Start observing the document
+if (document.body) {
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  })
+}
