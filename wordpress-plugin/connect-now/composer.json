@@ -1,0 +1,21 @@
+{
+  "name": "connectnow/wordpress-plugin",
+  "description": "WordPress plugin for ConnectNow video conferencing",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "authors": [
+    {
+      "name": "Hoang Thong Pham",
+      "email": "info@thongphamit.site",
+      "homepage": "https://thongphamit.site"
+    }
+  ],
+  "require": {
+    "php": ">=7.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "ConnectNow\\": "includes/"
+    }
+  }
+}
