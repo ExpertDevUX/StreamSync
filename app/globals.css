@@ -75,6 +75,92 @@
     @apply bg-background text-foreground;
   }
 
+  /* Custom scrollbar styling with gradient and smooth appearance */
+  /* Webkit browsers (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #3b82f6 0%, #8b5cf6 100%);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+    transition: all 0.3s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #2563eb 0%, #7c3aed 100%);
+    background-clip: content-box;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-color: #3b82f6 transparent;
+    scrollbar-width: thin;
+  }
+
+  *:hover {
+    scrollbar-color: #2563eb transparent;
+  }
+
+  /* Custom scrollbar class for modal dialogs */
+  .scrollbar-custom::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 10px;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #3b82f6 0%, #8b5cf6 100%);
+    border-radius: 10px;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #2563eb 0%, #7c3aed 100%);
+  }
+
+  /* Added custom animations for video tiles */
+  @keyframes ping {
+    75%,
+    100% {
+      transform: scale(2);
+      opacity: 0;
+    }
+  }
+
+  @keyframes pulse-glow {
+    0%,
+    100% {
+      opacity: 1;
+      filter: brightness(1);
+    }
+    50% {
+      opacity: 0.8;
+      filter: brightness(1.2);
+    }
+  }
+
+  .animate-ping {
+    animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  .delay-75 {
+    animation-delay: 75ms;
+  }
+
+  .delay-150 {
+    animation-delay: 150ms;
+  }
+
   /* Enhanced mobile optimizations */
   /* Prevent zoom on mobile input focus */
   @media screen and (max-width: 640px) {

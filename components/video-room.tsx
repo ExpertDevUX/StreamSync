@@ -18,6 +18,7 @@ import {
   MessageSquare,
   Sun,
   Moon,
+  Phone,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -44,6 +45,7 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
   const { toast } = useToast()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [callType, setCallType] = useState<"voice" | "video" | "team" | "group">("video")
   const [isVideoEnabled, setIsVideoEnabled] = useState(true)
   const [isAudioEnabled, setIsAudioEnabled] = useState(true)
   const [isScreenSharing, setIsScreenSharing] = useState(false)
@@ -71,7 +73,20 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
     const storedName = localStorage.getItem("userName") || `User-${Math.floor(Math.random() * 1000)}`
     setUserName(storedName)
     localStorage.setItem("userName", storedName)
-  }, [])
+
+    const storedCallType = localStorage.getItem(`room_${roomId}_callType`) as
+      | "voice"
+      | "video"
+      | "team"
+      | "group"
+      | null
+    if (storedCallType) {
+      setCallType(storedCallType)
+      if (storedCallType === "voice") {
+        setIsVideoEnabled(false)
+      }
+    }
+  }, [roomId])
 
   useEffect(() => {
     const roomPasswords = JSON.parse(localStorage.getItem("roomPasswords") || "{}")
@@ -91,18 +106,21 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
 
     const initializeRoom = async () => {
       try {
-        // Create room if needed
         await fetch("/api/rooms", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: roomId, name: roomId, userId: userIdRef.current }),
+          body: JSON.stringify({ id: roomId, name: roomId, userId: userIdRef.current, callType }),
         })
 
-        // Get local media
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720 },
+        const constraints: MediaStreamConstraints = {
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        })
+        }
+
+        if (callType !== "voice") {
+          constraints.video = { width: 1280, height: 720 }
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints)
 
         if (!isActive) {
           stream.getTracks().forEach((track) => track.stop())
@@ -110,11 +128,10 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
         }
 
         localStreamRef.current = stream
-        if (localVideoRef.current) {
+        if (localVideoRef.current && callType !== "voice") {
           localVideoRef.current.srcObject = stream
         }
 
-        // Join room
         const joinRes = await fetch("/api/signaling", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -130,10 +147,8 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
 
         const joinData = await joinRes.json()
 
-        // Start polling for signals
         startPolling()
 
-        // Log call history
         await fetch("/api/call-history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -148,7 +163,10 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
         console.error("Error initializing room:", error)
         toast({
           title: "Connection Error",
-          description: "Failed to join the room. Please check your permissions.",
+          description:
+            callType === "voice"
+              ? "Could not access your microphone. Please check permissions."
+              : "Could not access your camera/microphone. Please check permissions.",
           variant: "destructive",
         })
       }
@@ -158,21 +176,16 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
 
     return () => {
       isActive = false
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop())
+      }
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
       }
       peersRef.current.forEach((peer) => peer.connection.close())
       peersRef.current.clear()
-      localStreamRef.current?.getTracks().forEach((track) => track.stop())
-
-      // Leave room
-      fetch("/api/signaling", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "leave", roomId, userId: userIdRef.current }),
-      })
     }
-  }, [isAuthenticated, userName, mounted, roomId, toast])
+  }, [isAuthenticated, userName, mounted, roomId, toast, callType])
 
   useEffect(() => {
     const checkRoomOwnership = async () => {
@@ -223,11 +236,9 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
           return
         }
 
-        // Handle participants
         if (data.participants) {
           setParticipantCount(data.participants.length + 1)
 
-          // Connect to new participants
           for (const participant of data.participants) {
             if (!peersRef.current.has(participant.userId)) {
               console.log("[v0] 🆕 New participant detected:", participant.userId, participant.userName)
@@ -235,7 +246,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
             }
           }
 
-          // Remove disconnected participants
           const activeIds = new Set(data.participants.map((p: any) => p.userId))
           for (const [peerId, peer] of peersRef.current) {
             if (!activeIds.has(peerId)) {
@@ -247,7 +257,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
           }
         }
 
-        // Handle signals
         if (data.signals) {
           for (const signal of data.signals) {
             await handleSignal(signal.from, signal.signal)
@@ -290,7 +299,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
       pc.addTrack(track, localStreamRef.current!)
     })
 
-    // Verify tracks were added
     const senders = pc.getSenders()
     console.log("[v0] ✓ Peer connection has", senders.length, "senders")
 
@@ -310,13 +318,11 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
       if (peer) {
         peer.stream = remoteStream
         peersRef.current.set(peerId, peer)
-        // Force re-render by creating new Map
         setPeers(new Map(peersRef.current))
         console.log("[v0] ✅ Updated peer", peerId, "with remote stream")
       }
     }
 
-    // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("[v0] 🧊 Sending ICE candidate to", peerId)
@@ -351,7 +357,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
     peersRef.current.set(peerId, peerConnection)
     setPeers(new Map(peersRef.current))
 
-    // If initiator, create and send offer
     if (initiator) {
       console.log("[v0] 📤 Creating offer for", peerId)
       const offer = await pc.createOffer()
@@ -366,7 +371,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
 
     let peer = peersRef.current.get(fromId)
 
-    // Create peer if it doesn't exist (receiving offer from new peer)
     if (!peer && signal.type === "offer") {
       console.log("[v0] Creating peer in response to offer from", fromId)
       await createPeerConnection(fromId, `User-${fromId.slice(5, 8)}`, false)
@@ -420,7 +424,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
   }
 
   const handlePasswordSubmit = async (password: string) => {
-    // Verify password logic
     const roomPasswords = JSON.parse(localStorage.getItem("roomPasswords") || "{}")
     if (roomPasswords[roomId] === password) {
       setIsAuthenticated(true)
@@ -439,7 +442,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
       const endForAll = localStorage.getItem(`room_${roomId}_endForAll`) === "true"
 
       if (endForAll) {
-        // Signal to kick all users
         await fetch("/api/signaling", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -478,6 +480,14 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
   }
 
   const toggleVideo = () => {
+    if (callType === "voice") {
+      toast({
+        title: "Voice Call",
+        description: "Video is not available in voice-only calls",
+      })
+      return
+    }
+
     if (localStreamRef.current) {
       const videoTrack = localStreamRef.current.getVideoTracks()[0]
       if (videoTrack) {
@@ -485,7 +495,7 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
         setIsVideoEnabled(videoTrack.enabled)
         toast({
           title: videoTrack.enabled ? "Camera On" : "Camera Off",
-          description: videoTrack.enabled ? "Your camera is now on." : "Your camera is now off.",
+          description: videoTrack.enabled ? "Your camera is now visible" : "Your camera is now hidden",
         })
       }
     }
@@ -507,7 +517,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
 
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
-      // Stop screen sharing and restore camera
       const videoTrack = localStreamRef.current?.getVideoTracks()[0]
       if (videoTrack) {
         videoTrack.enabled = true
@@ -520,7 +529,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
         const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true })
         const screenTrack = screenStream.getVideoTracks()[0]
 
-        // Replace video track in all peer connections
         peersRef.current.forEach((peer) => {
           const sender = peer.connection.getSenders().find((s) => s.track?.kind === "video")
           if (sender) {
@@ -528,7 +536,6 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
           }
         })
 
-        // Handle screen share stop
         screenTrack.onended = () => {
           const videoTrack = localStreamRef.current?.getVideoTracks()[0]
           if (videoTrack) {
@@ -584,101 +591,123 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
   const totalParticipants = peers.size + 1
 
   return (
-    <div className="min-h-screen bg-background flex flex-col touch-manipulation overscroll-none">
-      <header className="border-b border-border px-2 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 flex-shrink-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
-            <h2 className="text-xs sm:text-sm md:text-lg font-semibold truncate">{roomId}</h2>
+    <div className="relative h-screen w-screen bg-gradient-to-br from-background via-background to-accent/10 overflow-hidden">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border/50 shadow-lg">
+        <div className="flex items-center justify-between p-3 md:p-4 max-w-[2000px] mx-auto">
+          <div className="flex items-center gap-3 md:gap-4 min-w-0">
+            <h1 className="text-lg md:text-xl font-bold text-foreground truncate">{roomId}</h1>
             <Button
               variant="outline"
               size="sm"
               onClick={copyRoomLink}
-              className="gap-1 sm:gap-2 bg-transparent hidden md:flex h-8"
+              className="hidden sm:flex gap-2 shrink-0 h-9 hover:bg-accent/80 transition-colors bg-transparent"
             >
-              <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden lg:inline">Copy Link</span>
-            </Button>
-            <Button variant="outline" size="icon" onClick={copyRoomLink} className="md:hidden h-7 w-7 bg-transparent">
-              <Copy className="w-3.5 h-3.5" />
+              <Copy className="w-4 h-4" />
+              <span className="hidden md:inline">Copy Link</span>
             </Button>
           </div>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-              <Users className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="text-xs sm:text-sm font-medium">{participantCount}</span>
+
+          <div className="flex items-center gap-2 md:gap-3 shrink-0">
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
+              {callType === "voice" && <Phone className="w-4 h-4" />}
+              {callType === "video" && <Video className="w-4 h-4" />}
+              {(callType === "team" || callType === "group") && <Users className="w-4 h-4" />}
+              <span className="capitalize">{callType}</span>
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/80 text-foreground">
+              <Users className="w-4 h-4" />
+              <span className="text-sm font-medium">{participantCount}</span>
             </div>
 
             {mounted && (
-              <>
+              <div className="hidden md:flex gap-1 p-1 rounded-lg bg-accent/50">
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setTheme("system")}
-                  className={cn(
-                    "rounded-full h-7 w-7 sm:h-8 sm:w-8 hidden sm:flex",
-                    theme === "system" && "bg-primary/10 text-primary",
-                  )}
-                  title="System Theme"
+                  variant={theme === "light" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setTheme("light")}
+                  className="h-8 w-8 p-0"
                 >
-                  <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <Sun className="w-4 h-4" />
                 </Button>
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                  className="rounded-full h-7 w-7 sm:h-8 sm:w-8 hidden sm:flex"
+                  variant={theme === "dark" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setTheme("dark")}
+                  className="h-8 w-8 p-0"
                 >
-                  {theme === "dark" ? (
-                    <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  ) : (
-                    <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  )}
+                  <Moon className="w-4 h-4" />
                 </Button>
-              </>
+              </div>
             )}
           </div>
         </div>
       </header>
 
       <main className="flex-1 flex relative overflow-hidden min-h-0">
-        {/* Video grid container */}
         <div className="flex-1 p-1 sm:p-2 md:p-4 lg:p-6 overflow-y-auto overscroll-contain">
           <div
             className={cn(
-              "h-full grid gap-1 sm:gap-2 md:gap-4 auto-rows-fr content-start",
+              "h-full grid gap-2 sm:gap-3 md:gap-4 auto-rows-fr content-start",
               getGridLayout(totalParticipants),
             )}
           >
-            {/* Local video */}
-            <Card className="relative overflow-hidden bg-gradient-to-br from-muted to-muted/50 shadow-lg min-h-[180px] sm:min-h-[240px] md:min-h-0">
+            <Card className="group relative overflow-hidden bg-gradient-to-br from-primary/5 via-muted/50 to-primary/10 border-2 border-primary/20 shadow-xl hover:shadow-2xl transition-all duration-300 min-h-[180px] sm:min-h-[240px] md:min-h-0 rounded-2xl hover:scale-[1.02] animate-in fade-in-50">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl" />
+
               <video
                 ref={localVideoRef}
                 autoPlay
                 playsInline
                 muted
                 className={cn(
-                  "w-full h-full object-cover transition-opacity duration-300",
-                  !isVideoEnabled && "opacity-0",
+                  "relative w-full h-full object-cover transition-all duration-500 rounded-2xl",
+                  !isVideoEnabled && "opacity-0 scale-95",
                 )}
               />
               {!isVideoEnabled && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10">
-                  <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-32 lg:h-32 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-primary">
-                    {userName.charAt(0).toUpperCase()}
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 backdrop-blur-sm">
+                  <div className="relative">
+                    <div className="absolute inset-0 w-12 h-12 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-32 lg:h-32 rounded-full bg-primary/20 animate-ping" />
+                    <div className="relative w-12 h-12 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-32 lg:h-32 rounded-full bg-gradient-to-br from-primary via-purple-500 to-pink-500 shadow-2xl flex items-center justify-center text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-white animate-in zoom-in-50">
+                      {userName.charAt(0).toUpperCase()}
+                    </div>
                   </div>
                 </div>
               )}
-              <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-black/60 backdrop-blur-sm text-white text-[10px] sm:text-xs font-medium">
-                You {isScreenSharing && "(Sharing)"}
+              <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-white text-xs sm:text-sm font-medium shadow-lg">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-lg shadow-green-400/50" />
+                  <span>You</span>
+                  {isScreenSharing && (
+                    <span className="text-[10px] sm:text-xs bg-primary/80 px-2 py-0.5 rounded-full">Sharing</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="flex gap-1 bg-black/40 backdrop-blur-md rounded-full p-1.5 border border-white/10">
+                  {isVideoEnabled && (
+                    <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
+                      <Video className="w-3 h-3 text-green-400" />
+                    </div>
+                  )}
+                  {isAudioEnabled && (
+                    <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center">
+                      <Mic className="w-3 h-3 text-blue-400" />
+                    </div>
+                  )}
+                </div>
               </div>
             </Card>
 
-            {/* Remote videos */}
             {Array.from(peers.values()).map((peer) => (
               <Card
                 key={peer.id}
-                className="relative overflow-hidden bg-gradient-to-br from-muted to-muted/50 shadow-lg min-h-[180px] sm:min-h-[240px] md:min-h-0"
+                className="group relative overflow-hidden bg-gradient-to-br from-secondary/50 via-muted/50 to-secondary/30 border-2 border-border/50 shadow-xl hover:shadow-2xl transition-all duration-300 min-h-[180px] sm:min-h-[240px] md:min-h-0 rounded-2xl hover:scale-[1.02] animate-in fade-in-50 slide-in-from-bottom-4"
               >
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-teal-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl" />
+
                 {peer.stream && peer.stream.getTracks().length > 0 ? (
                   <video
                     autoPlay
@@ -696,17 +725,33 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
                         }
                       }
                     }}
-                    className="w-full h-full object-cover"
+                    className="relative w-full h-full object-cover rounded-2xl transition-all duration-500"
                   />
                 ) : (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10">
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-32 lg:h-32 rounded-full bg-primary/10 backdrop-blur-sm flex items-center justify-center text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-primary">
-                      {peer.name.charAt(0).toUpperCase()}
+                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-500/10 via-cyan-500/10 to-teal-500/10 backdrop-blur-sm">
+                    <div className="relative">
+                      <div className="absolute inset-0 w-12 h-12 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-32 lg:h-32 rounded-full bg-blue-500/20 animate-ping" />
+                      <div className="relative w-12 h-12 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-32 lg:h-32 rounded-full bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 shadow-2xl flex items-center justify-center text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold text-white animate-in zoom-in-50">
+                        {peer.name.charAt(0).toUpperCase()}
+                      </div>
                     </div>
                   </div>
                 )}
-                <div className="absolute bottom-1 left-1 sm:bottom-2 sm:left-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-black/60 backdrop-blur-sm text-white text-[10px] sm:text-xs font-medium">
-                  {peer.name}
+                <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-white text-xs sm:text-sm font-medium shadow-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shadow-lg shadow-blue-400/50" />
+                    <span>{peer.name}</span>
+                  </div>
+                </div>
+
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div className="bg-black/40 backdrop-blur-md rounded-full px-2 py-1 border border-white/10">
+                    <div className="flex items-center gap-1">
+                      <div className="w-1 h-2 bg-green-400 rounded-full animate-pulse" />
+                      <div className="w-1 h-3 bg-green-400 rounded-full animate-pulse delay-75" />
+                      <div className="w-1 h-4 bg-green-400 rounded-full animate-pulse delay-150" />
+                    </div>
+                  </div>
                 </div>
               </Card>
             ))}
@@ -719,14 +764,12 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
           </div>
         )}
 
-        {/* Mobile Chat Sheet */}
         <Sheet open={showChat && typeof window !== "undefined" && window.innerWidth < 768} onOpenChange={setShowChat}>
           <SheetContent side="bottom" className="h-[80vh] max-h-[600px] p-0 rounded-t-2xl">
             <ChatPanel roomId={roomId} userId={userIdRef.current} userName={userName} />
           </SheetContent>
         </Sheet>
 
-        {/* Settings Sheet */}
         <Sheet open={showSettings} onOpenChange={setShowSettings}>
           <SheetContent
             side="bottom"
@@ -743,20 +786,18 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
           </SheetContent>
         </Sheet>
 
-        {/* Captions Overlay */}
         {captionsEnabled && (
           <CaptionsOverlay isActive={captionsEnabled} language={captionLanguage} localStream={localStreamRef.current} />
         )}
       </main>
 
-      {/* Controls Footer */}
-      <footer className="border-t border-border px-2 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 flex-shrink-0 safe-area-bottom">
+      <footer className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-lg border-t border-border/50 shadow-lg">
         <div className="flex items-center justify-center gap-2 sm:gap-3 md:gap-4">
           <Button
             variant={isAudioEnabled ? "default" : "destructive"}
             size="icon"
             onClick={toggleAudio}
-            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-lg active:scale-95 transition-transform"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-2xl hover:shadow-primary/50 active:scale-90 transition-all duration-200 hover:scale-110"
           >
             {isAudioEnabled ? <Mic className="w-5 h-5 sm:w-6 sm:h-6" /> : <MicOff className="w-5 h-5 sm:w-6 sm:h-6" />}
           </Button>
@@ -764,7 +805,7 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
             variant={isVideoEnabled ? "default" : "destructive"}
             size="icon"
             onClick={toggleVideo}
-            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-lg active:scale-95 transition-transform"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-2xl hover:shadow-primary/50 active:scale-90 transition-all duration-200 hover:scale-110"
           >
             {isVideoEnabled ? (
               <Video className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -776,7 +817,7 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
             variant={isScreenSharing ? "secondary" : "outline"}
             size="icon"
             onClick={toggleScreenShare}
-            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full hidden sm:flex active:scale-95 transition-transform"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-lg hover:shadow-xl active:scale-90 transition-all duration-200 hover:scale-110 hidden sm:flex"
           >
             {isScreenSharing ? (
               <MonitorOff className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -788,7 +829,7 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
             variant="outline"
             size="icon"
             onClick={() => setShowChat(!showChat)}
-            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full active:scale-95 transition-transform"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-lg hover:shadow-xl active:scale-90 transition-all duration-200 hover:scale-110"
           >
             <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
@@ -796,7 +837,7 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
             variant="outline"
             size="icon"
             onClick={() => setShowSettings(!showSettings)}
-            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full active:scale-95 transition-transform"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-lg hover:shadow-xl active:scale-90 transition-all duration-200 hover:scale-110"
           >
             <Settings className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>
@@ -804,7 +845,7 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
             variant="destructive"
             size="icon"
             onClick={handleEndCall}
-            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-lg active:scale-95 transition-transform"
+            className="h-12 w-12 sm:h-14 sm:w-14 md:h-12 md:w-12 rounded-full shadow-2xl shadow-destructive/50 hover:shadow-destructive/70 active:scale-90 transition-all duration-200 hover:scale-110 hover:rotate-12"
           >
             <PhoneOff className="w-5 h-5 sm:w-6 sm:h-6" />
           </Button>

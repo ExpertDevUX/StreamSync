@@ -6,7 +6,7 @@ const sql = neon(process.env.DATABASE_URL!)
 
 export async function POST(request: Request) {
   try {
-    const { id, name, password, userId } = await request.json()
+    const { id, name, password, userId, callType = "video" } = await request.json()
 
     let passwordHash = null
     if (password) {
@@ -14,8 +14,8 @@ export async function POST(request: Request) {
     }
 
     await sql`
-      INSERT INTO rooms (id, name, password_hash, created_by)
-      VALUES (${id}, ${name}, ${passwordHash}, ${userId})
+      INSERT INTO rooms (id, name, password_hash, created_by, call_type)
+      VALUES (${id}, ${name}, ${passwordHash}, ${userId}, ${callType})
     `
 
     return NextResponse.json({ success: true, roomId: id })
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { id, name, userId } = await request.json()
+    const { id, name, userId, callType = "video" } = await request.json()
 
     // Check if room exists
     const existing = await sql`
@@ -69,10 +69,10 @@ export async function PUT(request: Request) {
     `
 
     if (existing.length === 0) {
-      // Create room automatically
+      // Create room automatically with call type
       await sql`
-        INSERT INTO rooms (id, name, password_hash, created_by)
-        VALUES (${id}, ${name || id}, NULL, ${userId})
+        INSERT INTO rooms (id, name, password_hash, created_by, call_type)
+        VALUES (${id}, ${name || id}, NULL, ${userId}, ${callType})
         ON CONFLICT (id) DO NOTHING
       `
     }
