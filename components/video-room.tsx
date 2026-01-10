@@ -367,18 +367,18 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
   }
 
   const handleSignal = async (fromId: string, signal: any) => {
-    console.log("[v0] Handling signal from", fromId, "type:", signal.type)
+    console.log("[v0] 📨 Handling signal from", fromId, "type:", signal.type)
 
     let peer = peersRef.current.get(fromId)
 
     if (!peer && signal.type === "offer") {
-      console.log("[v0] Creating peer in response to offer from", fromId)
+      console.log("[v0] 🆕 Creating peer in response to offer from", fromId)
       await createPeerConnection(fromId, `User-${fromId.slice(5, 8)}`, false)
       peer = peersRef.current.get(fromId)
     }
 
     if (!peer) {
-      console.log("[v0] No peer found for", fromId)
+      console.log("[v0] ⚠️ No peer found for", fromId, "- will retry on next signal")
       return
     }
 
@@ -386,40 +386,57 @@ export function VideoRoom({ roomId }: VideoRoomProps) {
 
     try {
       if (signal.type === "offer") {
-        console.log("[v0] Setting remote description (offer) from", fromId)
+        console.log("[v0] 📥 Setting remote description (offer) from", fromId)
         await pc.setRemoteDescription(new RTCSessionDescription(signal.offer))
-        console.log("[v0] Creating answer for", fromId)
+        console.log("[v0] 📝 Creating answer for", fromId)
         const answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
-        console.log("[v0] Sending answer to", fromId)
+        console.log("[v0] 📤 Sending answer back to", fromId)
         await sendSignal(fromId, { type: "answer", answer })
       } else if (signal.type === "answer") {
-        console.log("[v0] Setting remote description (answer) from", fromId)
+        console.log("[v0] 📥 Setting remote description (answer) from", fromId)
         await pc.setRemoteDescription(new RTCSessionDescription(signal.answer))
       } else if (signal.type === "candidate") {
-        console.log("[v0] Adding ICE candidate from", fromId)
-        await pc.addIceCandidate(new RTCIceCandidate(signal.candidate))
+        console.log("[v0] 🧊 Adding ICE candidate from", fromId)
+        if (signal.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate))
+        }
       }
     } catch (error) {
-      console.error("[v0] Error handling signal from", fromId, error)
+      console.error("[v0] ❌ Error handling signal from", fromId, error)
     }
   }
 
-  const sendSignal = async (targetId: string, signal: any) => {
-    try {
-      await fetch("/api/signaling", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "signal",
-          roomId,
-          userId: userIdRef.current,
-          targetId,
-          data: { signal },
-        }),
-      })
-    } catch (error) {
-      console.error("Error sending signal:", error)
+  const sendSignal = async (targetId: string, signal: any, retries = 3) => {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        console.log(`[v0] 📤 Sending ${signal.type} to ${targetId} (attempt ${attempt + 1}/${retries})`)
+        const res = await fetch("/api/signaling", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "signal",
+            roomId,
+            userId: userIdRef.current,
+            targetId,
+            data: { signal },
+          }),
+        })
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`)
+        }
+
+        const responseData = await res.json()
+        console.log(`[v0] ✅ Signal ${signal.type} successfully sent to ${targetId}`)
+        return responseData
+      } catch (error) {
+        console.error(`[v0] ❌ Signal send attempt ${attempt + 1} failed:`, error)
+        if (attempt < retries - 1) {
+          const delay = Math.pow(2, attempt) * 500
+          await new Promise((resolve) => setTimeout(resolve, delay))
+        }
+      }
     }
   }
 

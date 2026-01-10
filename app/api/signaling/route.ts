@@ -47,16 +47,23 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "Missing targetId for signal" }, { status: 400 })
         }
 
+        const signalData = {
+          type: data.signal.type,
+          offer: data.signal.offer || null,
+          answer: data.signal.answer || null,
+          candidate: data.signal.candidate || null,
+        }
+
         await sql`
           INSERT INTO signaling_messages (
             room_id, from_user_id, to_user_id, message_type, message_data, created_at
           )
           VALUES (
-            ${roomId}, ${userId}, ${targetId}, 'signal', ${JSON.stringify(data.signal)}, NOW()
+            ${roomId}, ${userId}, ${targetId}, 'signal', ${JSON.stringify(signalData)}, NOW()
           )
         `
 
-        console.log("[v0] Signal stored from", userId, "to", targetId)
+        console.log("[v0] ✅ Signal STORED from", userId, "TO", targetId, "type:", data.signal.type)
 
         return NextResponse.json({ success: true })
       }
@@ -68,6 +75,7 @@ export async function POST(request: Request) {
           WHERE room_id = ${roomId} AND user_id = ${userId}
         `
 
+        // Check for kick signal
         const kickSignal = await sql`
           SELECT id FROM signaling_messages
           WHERE room_id = ${roomId}
@@ -78,12 +86,10 @@ export async function POST(request: Request) {
         `
 
         if (kickSignal.length > 0) {
-          // Mark as consumed and return kick signal
           await sql`UPDATE signaling_messages SET consumed = true WHERE id = ${kickSignal[0].id}`
           return NextResponse.json({ kicked: true })
         }
 
-        // Get signals for this user
         const signals = await sql`
           SELECT id, from_user_id, message_data, created_at
           FROM signaling_messages
@@ -95,10 +101,11 @@ export async function POST(request: Request) {
           ORDER BY created_at ASC
         `
 
-        // Mark signals as consumed
+        // Mark signals as consumed only after retrieving them
         if (signals.length > 0) {
           const ids = signals.map((s: any) => s.id)
           await sql`UPDATE signaling_messages SET consumed = true WHERE id = ANY(${ids})`
+          console.log("[v0] ✅ Delivered", signals.length, "signals to", userId)
         }
 
         // Get active participants
@@ -111,7 +118,14 @@ export async function POST(request: Request) {
           ORDER BY user_id
         `
 
-        console.log("[v0] Heartbeat - Signals:", signals.length, "Participants:", participants.length)
+        console.log(
+          "[v0] Heartbeat - Signals for",
+          userId,
+          ":",
+          signals.length,
+          "Active participants:",
+          participants.length,
+        )
 
         return NextResponse.json({
           signals: signals.map((s: any) => ({
@@ -126,7 +140,6 @@ export async function POST(request: Request) {
       }
 
       case "kick_all": {
-        // Insert a kick_all message that all users will see on next heartbeat
         await sql`
           INSERT INTO signaling_messages (
             room_id, from_user_id, to_user_id, message_type, message_data, created_at
