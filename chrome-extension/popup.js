@@ -1,19 +1,23 @@
 const chrome = window.chrome
 
-// Get the base URL from storage or use default
 let baseUrl = "https://v0-connect-now-8m.vercel.app"
 
-// Load saved settings
-chrome.storage.sync.get(["baseUrl", "recentRooms"], (result) => {
-  if (result.baseUrl) {
-    baseUrl = result.baseUrl
+chrome.storage.sync.get(["serverUrl"], (result) => {
+  if (result.serverUrl) {
+    baseUrl = result.serverUrl
   }
-  if (result.recentRooms) {
-    displayRecentRooms(result.recentRooms)
+  loadRecentRooms()
+})
+
+// Listen for settings changes
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "updateBaseUrl") {
+    baseUrl = request.baseUrl
+    loadRecentRooms()
+    updateStatus(`✓ Server: ${new URL(baseUrl).hostname}`, "success")
   }
 })
 
-// Generate friendly room ID
 function generateRoomId() {
   const adjectives = ["quick", "happy", "bright", "smart", "cool", "fast", "neat", "wise"]
   const nouns = ["meeting", "chat", "talk", "call", "sync", "hub", "room", "space"]
@@ -32,7 +36,7 @@ document.getElementById("newMeeting").addEventListener("click", () => {
   openMeeting(url, "Creating instant meeting...")
 })
 
-// Schedule meeting (opens home page with create modal)
+// Schedule meeting
 document.getElementById("scheduleMeeting").addEventListener("click", () => {
   const url = `${baseUrl}`
   chrome.tabs.create({ url }, () => {
@@ -41,7 +45,7 @@ document.getElementById("scheduleMeeting").addEventListener("click", () => {
   })
 })
 
-// Toggle password input visibility
+// Toggle password input
 document.getElementById("hasPassword").addEventListener("change", (e) => {
   const passwordInput = document.getElementById("roomPassword")
   passwordInput.style.display = e.target.checked ? "block" : "none"
@@ -50,7 +54,7 @@ document.getElementById("hasPassword").addEventListener("change", (e) => {
   }
 })
 
-// Join existing meeting
+// Join meeting
 document.getElementById("joinMeeting").addEventListener("click", () => {
   const roomCode = document.getElementById("roomCode").value.trim()
   const hasPassword = document.getElementById("hasPassword").checked
@@ -66,7 +70,6 @@ document.getElementById("joinMeeting").addEventListener("click", () => {
     return
   }
 
-  // Store password in session storage via URL parameter
   const url = hasPassword
     ? `${baseUrl}/room/${roomCode}?pwd=${encodeURIComponent(password)}`
     : `${baseUrl}/room/${roomCode}`
@@ -75,17 +78,13 @@ document.getElementById("joinMeeting").addEventListener("click", () => {
   openMeeting(url, "Joining room...")
 })
 
-// Allow Enter key to join
+// Allow Enter key
 document.getElementById("roomCode").addEventListener("keypress", (e) => {
-  if (e.key === "Enter") {
-    document.getElementById("joinMeeting").click()
-  }
+  if (e.key === "Enter") document.getElementById("joinMeeting").click()
 })
 
 document.getElementById("roomPassword").addEventListener("keypress", (e) => {
-  if (e.key === "Enter") {
-    document.getElementById("joinMeeting").click()
-  }
+  if (e.key === "Enter") document.getElementById("joinMeeting").click()
 })
 
 // Open settings
@@ -94,7 +93,7 @@ document.getElementById("openSettings").addEventListener("click", (e) => {
   chrome.runtime.openOptionsPage()
 })
 
-// Open meeting in new tab
+// Helper functions
 function openMeeting(url, message) {
   chrome.tabs.create({ url }, () => {
     updateStatus(message, "success")
@@ -102,102 +101,81 @@ function openMeeting(url, message) {
   })
 }
 
-// Update status message
 function updateStatus(message, type = "") {
   const statusEl = document.getElementById("status")
   statusEl.textContent = message
   statusEl.className = "status"
-  if (type) {
-    statusEl.classList.add(type)
-  }
+  if (type) statusEl.classList.add(type)
 }
 
-// Add room to recent list
 function addToRecentRooms(roomId, roomName) {
   chrome.storage.sync.get(["recentRooms"], (result) => {
     let recentRooms = result.recentRooms || []
-
-    // Remove if already exists
     recentRooms = recentRooms.filter((room) => room.id !== roomId)
-
-    // Add to beginning
     recentRooms.unshift({
       id: roomId,
       name: roomName,
       timestamp: Date.now(),
     })
-
-    // Keep only last 5
     recentRooms = recentRooms.slice(0, 5)
 
     chrome.storage.sync.set({ recentRooms }, () => {
-      displayRecentRooms(recentRooms)
+      loadRecentRooms()
     })
   })
 }
 
-// Display recent rooms
-function displayRecentRooms(rooms) {
-  const container = document.getElementById("recentRooms")
+function loadRecentRooms() {
+  chrome.storage.sync.get(["recentRooms"], (result) => {
+    const rooms = result.recentRooms || []
+    const container = document.getElementById("recentRooms")
 
-  if (!rooms || rooms.length === 0) {
-    container.innerHTML = `
-      <div style="text-align: center; opacity: 0.6; padding: 20px; font-size: 13px;">
-        No recent rooms
-      </div>
-    `
-    return
-  }
+    if (rooms.length === 0) {
+      container.innerHTML = `<div style="text-align: center; opacity: 0.6; padding: 20px; font-size: 13px;">No recent rooms</div>`
+      return
+    }
 
-  container.innerHTML = rooms
-    .map((room) => {
-      const timeAgo = getTimeAgo(room.timestamp)
-      return `
-      <div class="room-item" data-room-id="${room.id}">
-        <div>
-          <div class="room-name">${room.name}</div>
-          <div class="room-time">${timeAgo}</div>
-        </div>
-        <div>→</div>
-      </div>
-    `
-    })
-    .join("")
+    container.innerHTML = rooms
+      .map((room) => {
+        const timeAgo = getTimeAgo(room.timestamp)
+        return `<div class="room-item" data-room-id="${room.id}"><div><div class="room-name">${room.name}</div><div class="room-time">${timeAgo}</div></div><div>→</div></div>`
+      })
+      .join("")
 
-  // Add click handlers
-  container.querySelectorAll(".room-item").forEach((item) => {
-    item.addEventListener("click", () => {
-      const roomId = item.getAttribute("data-room-id")
-      const url = `${baseUrl}/room/${roomId}`
-      openMeeting(url, "Rejoining room...")
+    container.querySelectorAll(".room-item").forEach((item) => {
+      item.addEventListener("click", () => {
+        const roomId = item.getAttribute("data-room-id")
+        const url = `${baseUrl}/room/${roomId}`
+        openMeeting(url, "Rejoining room...")
+      })
     })
   })
 }
 
-// Get time ago string
 function getTimeAgo(timestamp) {
   const seconds = Math.floor((Date.now() - timestamp) / 1000)
-
   if (seconds < 60) return "Just now"
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
   return `${Math.floor(seconds / 86400)}d ago`
 }
 
-// Check if we're on a ConnectNow page
+// Display current server info
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   if (tabs[0] && tabs[0].url) {
-    const url = tabs[0].url
-    if (url.includes("vercel.app") || url.includes("localhost")) {
-      updateStatus("✓ ConnectNow active", "success")
+    try {
+      const currentUrl = new URL(tabs[0].url)
+      const baseUrlObj = new URL(baseUrl)
 
-      // Extract room ID if on a room page
-      const roomMatch = url.match(/\/room\/([^/?]+)/)
-      if (roomMatch) {
-        const roomId = roomMatch[1]
-        document.getElementById("roomCode").value = roomId
-        updateStatus(`✓ Currently in: ${roomId}`, "success")
+      if (currentUrl.hostname === baseUrlObj.hostname || currentUrl.hostname.includes("localhost")) {
+        updateStatus(`✓ ${baseUrlObj.hostname}`, "success")
+        const roomMatch = tabs[0].url.match(/\/room\/([^/?]+)/)
+        if (roomMatch) {
+          document.getElementById("roomCode").value = roomMatch[1]
+        }
       }
+    } catch (e) {
+      console.error("URL error:", e)
     }
   }
 })

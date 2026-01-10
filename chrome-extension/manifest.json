@@ -1,20 +1,22 @@
 {
   "manifest_version": 3,
   "name": "ConnectNow - Video Meetings",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Quick access to ConnectNow video meetings with chat, screen sharing, and password-protected rooms",
   "permissions": ["activeTab", "storage", "tabs", "notifications"],
+  "options_page": "options.html",
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
-    }
+    },
+    "default_title": "ConnectNow"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.vercel.app/*", "*://*.vercel.dev/*", "http://localhost:*/*", "https://localhost:*/*"],
+      "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_end"
     }
@@ -27,5 +29,5 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "host_permissions": ["*://*.vercel.app/*"]
+  "host_permissions": ["*://*/*"]
 }
