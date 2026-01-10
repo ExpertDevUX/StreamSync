@@ -215,3 +215,62 @@
     }
   }
 }
+
+/* Enhanced mobile layout improvements */
+@media (max-width: 768px) {
+  /* Larger touch targets for mobile buttons */
+  button {
+    min-height: 44px; /* iOS recommended minimum */
+    min-width: 44px;
+  }
+
+  /* Improve form input spacing */
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+
+  /* Better spacing for mobile dialogs */
+  [role="dialog"] {
+    max-width: 95vw;
+    margin: 0 auto;
+    padding: 1rem;
+  }
+
+  /* Optimize video grid for mobile */
+  .video-grid {
+    gap: 0.5rem;
+  }
+
+  /* Mobile-friendly button groups */
+  .button-group {
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Stack controls vertically on small phones */
+  @media (max-width: 480px) {
+    .control-bar {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .control-bar button {
+      width: 100%;
+    }
+  }
+}
+
+/* Improved responsiveness for all device sizes */
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Tablet optimizations */
+  button {
+    min-height: 40px;
+  }
+
+  .video-grid {
+    gap: 1rem;
+  }
+}
